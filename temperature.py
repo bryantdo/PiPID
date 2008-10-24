@@ -118,8 +118,10 @@ class tempController :
         Returns the percent of rated max current being output.
         See getCurrent()
         """
-    	val = self.read(Melcor.REG_PERCENT_OUTPUT)
-        return val
+    	val = int(self.read(Melcor.REG_PERCENT_OUTPUT))
+        if val > 2**15 :
+            val -= 2**16
+        return float(val)/10.0
     def getCurrent(self) :
         """
         The returned current is not the actual current,
@@ -160,7 +162,7 @@ class tempController :
         """
         check_range(propband, 0, 99.9)
         check_range(integral, 0, 99.99)
-        check_range(derivative, 0, 99.99)
+        check_range(derivative, 0, 9.99)
 
     	val = double2melcor(propband)
     	self.write(Melcor.REG_PROPBAND_1, val)
@@ -206,7 +208,7 @@ class tempController :
         """
         check_range(propband, 0, 99.9)
         check_range(integral, 0, 99.99)
-        check_range(derivative, 0, 99.99)
+        check_range(derivative, 0, 9.99)
 
     	val = double2melcor(propband)
     	self.write(Melcor.REG_PROPBAND_2, val)
@@ -227,16 +229,32 @@ class tempController :
         """
         Experimental
         """
-        pid = self.read(Melcor.REG_PID_POWER_1)
-        prop = self.read(Melcor.REG_PROP_TERM_1)
-    	ntgrl = self.read(Melcor.REG_INTEGRAL_TERM_1)
-    	deriv = self.read(Melcor.REG_DERIVATIVE_TERM_1)
+        pid = int(self.read(Melcor.REG_PID_POWER_1))
+        if pid > 2**15 :
+            pid -= 2**16
+        prop = int(self.read(Melcor.REG_PROP_TERM_1))
+        if prop >= 2**15 :
+            prop -= 2**16
+    	ntgrl = int(self.read(Melcor.REG_INTEGRAL_TERM_1))
+        print ntgrl
+        if ntgrl >= 2**15 :
+            ntgrl -= 2**16
+    	deriv = int(self.read(Melcor.REG_DERIVATIVE_TERM_1))
+        if deriv >= 2**15 :
+            deriv -= 2**16
+        return (pid, prop, ntgrl, deriv)
+    def checkFeedbackTerms(self) :
+        pid, prop, ntgrl, deriv = self.getFeedbackTerms()
         pout = self.getPercentCurrent()
-        temp = self.getTemp()
-        tset = self.getSetpoint()
-        print "pid %g =? sum %g =? cur %g" % (pid, prop+ntgrl+deriv, pout)
-        print "meas:     prop %d, integral %d, deriv %d" % (prop, ntgrl, deriv)
-        print "my calcs: prop %d" % (temp-tset)
+        T = self.getTemp()
+        Tset = self.getSetpoint()
+        if T > Tset : # cooling
+            Tprop, tint, tderiv = self.getCoolingGains()
+        else : # heating
+            Tprop, tint, tderiv = self.getHeatingGains()
+        print "pid(read) %g =? sum(calc from terms) %g =? cur(read) %g" % (pid, prop+ntgrl+deriv, pout)
+        print "read:     prop %d, integral %d, deriv %d" % (prop, ntgrl, deriv)
+        print "my calcs: prop %g" % ((Tset-T)/Tprop)
     def setTemp(self, setpoint, tolerance=0.3, time=10.0) :
     	"""
     	Changes setpoint to SETPOINT and waits for stability
@@ -291,7 +309,7 @@ class tempController :
     def _heat_until_close(self, setpoint, dead_time, heat_rate) :
         while self.getTemp() < setpoint - 0.5*rate*dead_time :
             time.sleep(dead_time/10.0)
-    def calcPropBands(setpoint, peltier_efficiency_fn, outside_equilib_rate) :
+    def calcPropBands_HACK(setpoint, peltier_efficiency_fn, outside_equilib_rate) :
         heat_loss = outside_equilib_rate * (setpoint - self.getAmbientTemp())
         required_current = heat_loss / peltier_efficiency_fn(setpoint)
         if required_current > self.maxCurrent :
@@ -306,6 +324,135 @@ class tempController :
             return (T_prop, T_prop*10)
         else : # right about room temperature
             return (T_prop, T_prop)
+    def getMode(self) :
+        mcode = self.read(Melcor.REG_AUTO_MANUAL_OP_MODE)
+        if mcode == 0 :
+            return 'auto'
+        elif mcode == 1 :
+            return 'manual'
+        else :
+            raise error, "Unrecognized mode code %d" % mcode            
+    def setMode(self, mode) :
+        if mode == 'auto' :
+            mcode = 0
+        elif mode == 'manual' :
+            mcode = 1
+        else :
+            raise error, "Unrecognized mode %s" % mode
+        self.write(Melcor.REG_AUTO_MANUAL_OP_MODE, mcode)
+    def getManualCurrent(self) :
+    	val = int(self.read(Melcor.REG_MANUAL_SET_POINT))
+        if val > 2**15 : # convert to signed
+            val -= 2**16
+        pct = float(val)/10.0 # stored value is percent * 10
+        return self.specMaxCur * pct / 100.0
+    def setManualCurrent(self, amps) :
+        if amps > self.maxCurrent :
+            raise error, "Suggested current %g > max %g" % \
+                (amps, self.maxCurrent)
+        pct = amps / self.specMaxCur * 100.0
+        val = int(pct * 10.0)
+        if val < 0 : # convert to unsigned
+            val += 2**16
+        self.write(Melcor.REG_MANUAL_SET_POINT, val)
+    def calcPropBands_ZN_get_step_response(self,
+                                           initial_current=None,
+                                           initial_wait_time=20.0,
+                                           current_step=0.1,
+                                           response_wait_time=40.0,
+                                           plotVerbose=False) :
+        """
+        Ziegler-Nichols tuning, using step response for input.
+        Process must be stable when calling this function.
+        """
+        if initial_current == None :
+            initial_current = self.getCurrent()
+        original_mode = self.getMode()
+        if original_mode == 'manual' :
+            original_current = self.getManualCurrent()
+        else :
+            self.setMode('manual')
+        self.setManualCurrent(initial_current)
+        Tarr = []
+        tarr = []
+        start = time.time()
+        tm = start
+        # get some stability data before stepping
+        while tm < start + initial_wait_time :
+            tarr.append(tm-start)
+            Tarr.append(self.getTemp())
+            tm = time.time()
+        # step the output
+        self.setManualCurrent(initial_current + current_step)
+        Tlast = Tarr[-1]
+        while tm < start + initial_wait_time + response_wait_time :
+            Tnow = self.getTemp()
+            if Tnow != Tlast : # save us some trouble averaging later
+                tarr.append(tm-start)
+                Tarr.append(self.getTemp())
+            Tlast = Tnow
+            tm = time.time()
+
+        self.setMode(original_mode)
+        if original_mode == 'manual' :
+            self.setManualCurrent(original_current)
+        if plotVerbose == True :
+            from pylab import figure, plot, title, xlabel, ylabel
+            figure(10)
+            plot(tarr, Tarr, 'r.-')
+            xlabel('time (s)')
+            ylabel('Temp (C)')
+            title('Plant step response')
+        return (tarr, Tarr)
+    def calcPropBands_ZN_analyze_step_response(self, tarr, Tarr,
+                                               initial_wait_time=20,
+                                               textVerbose=False) :
+        """
+        Analyze the step response to determine dead time td,
+        and slope at point of inflection spoi.
+        """
+        i=0
+        while tarr[i] < initial_wait_time :
+            i += 1
+        # find point of inflection (steepest slope)
+        istep = i
+        ipoi = istep
+        def slope(i) :
+            return (Tarr[i+1] - Tarr[i])/(tarr[i+1]-tarr[i])
+        for i in range(istep, len(tarr)-1) :
+            if slope(i) > slope(ipoi) :
+                ipoi = i
+        print "Max slope at t = %g, T = %g" % (tarr[ipoi], Tarr[ipoi])
+        spoi = slope(ipoi)
+        # find the dead time
+        # find the initial temperature
+        initialT = 0.0
+        for i in range(istep) :
+            initialT += Tarr[i]
+        initialT /= float(istep)
+        print "Initial temperature %g" % initialT
+        deltaT = Tarr[ipoi] - initialT
+        rise_t_to_poi = spoi/deltaT
+        td = tarr[ipoi] - initial_wait_time - rise_t_to_poi
+        return (td, spoi)
+    def calcPropBands_ZN_compute_terms(self, td, spoi) :
+        kp = 1.2/spoi
+        ki = 2*td
+        kd = td/2
+        return (kp, ki, kd)
+    def calcPropBands_ZN(self, initial_current=None,
+                         initial_wait_time=20.0,
+                         current_step=0.1,
+                         response_wait_time=40.0,
+                         textVerbose=False,
+                         plotVerbose=False) :
+        tarr, Tarr = self.calcPropBands_ZN_get_step_response( \
+            initial_current, initial_wait_time,
+            current_step, response_wait_time,
+            plotVerbose)
+        td, spoi = self.calcPropBands_ZN_analyze_step_response( \
+            tarr, Tarr, initial_wait_time, textVerbose)
+        return self.calcPropBands_ZN_compute_terms(td, spoi)
     def stripT(self, on) :
         if on :
             self.stripT = True
