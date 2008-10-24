@@ -1,14 +1,18 @@
 import Melcor
 import time
 import data_logger
+import stripchart
 
 log_dir = "/home/wking/rsrch/data/temperature"
+
+# buzzwords: 'integrator windup' for integral term built up during a slow approach.
+
 
 class error (Exception) :
     "Errors with the temperature controller"
     pass
 
-class errorMmelcor (error) :
+class errorMelcor (error) :
     pass
 class errorOutOfRange (error) :
     pass
@@ -62,12 +66,18 @@ class tempController :
     	self.Tmax = 50.0
     	self.specMaxCur = 4.0 # Amps, the rated max current from controller specs
     	self.T = Melcor.tempController(controller, device)
+        self.Tstrip = stripchart.stripchart(pipename='Tstrip_pipe',
+                                            title='Temp strip')
+        self.Cstrip = stripchart.stripchart(pipename='Cstrip_pipe',
+                                            title='Current strip')
         if maxCurrent != None : # if None, just leave maxCurrent at it's prev. val.
             self.setMaxCurrent(maxCurrent) # Amps
     def getTemp(self) :
         "Returns the current process temperature in degrees Celsius"
     	val = self.read(Melcor.REG_HIGH_RESOLUTION)
     	temp = val/100.0
+        if self.Tstrip.status == 'open' :
+            self.Tstrip.add_point(temp)
     	return temp
     def getAmbientTemp(self) :
         "Returns room temperature in degrees Celsius"
@@ -121,7 +131,10 @@ class tempController :
         value returned here.
         """
     	percentOutput = self.getPercentCurrent()
-    	return self.specMaxCur * percentOutput / 100
+        cur = self.specMaxCur * percentOutput / 100.0
+        if self.Cstrip.status == 'open' :
+            self.Cstrip.add_point(cur)
+    	return cur
     def setCoolingGains(self, propband=0.1, integral=0, derivative=0) :
         """
         (propband, integral, derivative, dead_band) -> None
@@ -293,6 +306,12 @@ class tempController :
             return (T_prop, T_prop*10)
         else : # right about room temperature
             return (T_prop, T_prop)
+    def stripT(self, on) :
+        if on :
+            self.stripT = True
+            pipename = 'Temp_pipe'
+            self.stripTpipe = os.popen(pipename)
+            os.system("stripchart -u %s" % pipename)
     def isStable(self, setpoint, tolerance=0.3, maxTime=10.0) :
     	"""
     	Counts how long the temperature stays within
@@ -331,12 +350,12 @@ class tempController :
     	return val/10.0
     def sanityCheck(self) :
         "Check that some key registers have the values we expect"
-    	_sanityCheck(Melcor.REG_UNITS_TYPE,   2) # SI
-    	_sanityCheck(Melcor.REG_C_OR_F,       1) # C
-    	_sanityCheck(Melcor.REG_FAILURE_MODE, 2) # off
-    	_sanityCheck(Melcor.REG_RAMPING_MODE, 0) # off
-    	_sanityCheck(Melcor.REG_OUTPUT_1,     1) # cool
-    	_sanityCheck(Melcor.REG_OUTPUT_2,     1) # heat
+    	self._sanityCheck(Melcor.REG_UNITS_TYPE,   2) # SI
+    	self._sanityCheck(Melcor.REG_C_OR_F,       1) # C
+    	self._sanityCheck(Melcor.REG_FAILURE_MODE, 2) # off
+    	self._sanityCheck(Melcor.REG_RAMPING_MODE, 0) # off
+    	self._sanityCheck(Melcor.REG_OUTPUT_1,     1) # cool
+    	self._sanityCheck(Melcor.REG_OUTPUT_2,     1) # heat
     def _sanityCheck(self, register, expected_value) :
     	val = self.read(register)
     	if val != expected_value :
@@ -426,6 +445,13 @@ class tempController :
         self.setCoolingGains(*orig_cool_gains)
         if log == True :
             log = 1# MARK
+    def time_getTemp(self) :
+        "Rough estimate timeing of getTemp(), takes me about 0.1s"
+        start = time.time()
+        for i in range(10) :
+            self.getTemp()
+        stop = time.time()
+        return (stop-start)/10.0
 
 def _test_tempController() :
     t = tempController(controller=1, maxCurrent=0.1)
