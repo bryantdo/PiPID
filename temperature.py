@@ -1,12 +1,10 @@
 import Melcor
 import time
-import data_logger
 import stripchart
 
-log_dir = "/home/wking/rsrch/data/temperature"
+VERSION = "0.2"
 
 # buzzwords: 'integrator windup' for integral term built up during a slow approach.
-
 
 class error (Exception) :
     "Errors with the temperature controller"
@@ -531,7 +529,7 @@ class tempController :
     	err = self.T.write(register, value)
     	if err != 0 :
     		raise errorMelcor
-    def getDeadtimeData(self, num_oscillations=10, curHysteresis=0.8, log=True) :
+    def getDeadtimeData(self, num_oscillations=10, curHysteresis=0.8) :
         orig_heat_gains = self.getHeatingGains()
         orig_cool_gains = self.getCoolingGains()
         if self.verbose :
@@ -590,8 +588,6 @@ class tempController :
             print " Restoring gains"
         self.setHeatingGains(*orig_heat_gains)
         self.setCoolingGains(*orig_cool_gains)
-        if log == True :
-            log = 1# MARK
     def time_getTemp(self) :
         "Rough estimate timeing of getTemp(), takes me about 0.1s"
         start = time.time()
