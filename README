@@ -1,8 +1,8 @@
-This package provides an object-oriented interface for temperature
-monitoring and PID_ control.  The idea is that experimentalists
-interested in temperature controlled experiments should not need to
-learn the inner workings of their PID controller before they can
-perform simple temperature control tasks.
+This package provides general PID_ control software in Python with a
+Melcor MTCA backend.  The idea is that experimentalists interested in
+temperature controlled experiments or other processes should not need
+to learn the inner workings of their PID controller before they can
+perform simple control tasks.
 
 Module structure
 ================
@@ -50,7 +50,7 @@ times to understand why you're getting instability or other control
 effects.  Here's an example that shows a reasonable approach with a
 bit of integrator overshoot::
 
-  >>> from tempcontrol.backend.test import TestBackend
+  >>> from pypid.backend.test import TestBackend
   >>> from time import sleep
   >>> from matplotlib import pyplot
   >>> from numpy import loadtxt
@@ -90,17 +90,17 @@ Packages
 Gentoo
 ~~~~~~
 
-I've packaged `tempcontrol` for Gentoo_.  You need layman_ and my `wtk
+I've packaged `pypid` for Gentoo_.  You need layman_ and my `wtk
 overlay`_.  Install with::
 
     # emerge -av app-portage/layman
     # layman --add wtk
-    # emerge -av dev-python/tempcontrol
+    # emerge -av dev-python/pypid
 
 Dependencies
 ------------
 
-If you're installing by hand or packaging `tempcontrol` for another
+If you're installing by hand or packaging `pypid` for another
 distribution, you'll need the following dependencies:
 
 =========  =====================  ================  ==========================
@@ -124,9 +124,9 @@ __ db578120_
 Installing by hand
 ------------------
 
-Tempcontrol is available as a Git_ repository::
+Pypid is available as a Git_ repository::
 
-    $ git clone http://www.physics.drexel.edu/~wking/code/git/tempcontrol.git
+    $ git clone http://www.physics.drexel.edu/~wking/code/git/pypid.git
 
 See the homepage_ for details.  To install the checkout, run the
 standard::
@@ -143,7 +143,7 @@ Testing
 
 Run the test suite with::
 
-    $ nosetests --with-doctest --doctest-tests tempcontrol
+    $ nosetests --with-doctest --doctest-tests pypid
 
 Note that you should have your temperature control device connected to
 your computer before running this command, as backend tests require a
@@ -184,5 +184,5 @@ Copyright 2008-2011
 .. _nose: http://somethingaboutorange.com/mrl/projects/nose/
 .. _Git: http://git-scm.com/
 .. _homepage:
-     http://www.physics.drexel.edu/~wking/unfolding-disasters/posts/tempcontrol/
+     http://www.physics.drexel.edu/~wking/unfolding-disasters/posts/pypid/
 .. _GNU General Public License Version 3: http://www.gnu.org/licenses/gpl.txt
