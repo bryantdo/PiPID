@@ -25,7 +25,7 @@ from time import sleep
 try:
     from matplotlib import pyplot
     from numpy import loadtxt
-except ImportError, e:
+except (ImportError,RuntimeError), e:
     pyplot = None
     loadtxt = None
     plot_import_error = e
