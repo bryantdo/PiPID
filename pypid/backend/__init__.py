@@ -50,7 +50,7 @@ def get_backend(name):
 
 
 class Backend (object):
-    """Temperature control backend
+    """Process-control backend
 
     There are several common forms for a PID control formula.  For the
     purpose of setting heating and cooling gains (`.get_*_gains()` and
@@ -64,48 +64,45 @@ class Backend (object):
 
     In this formulation, the parameter units will be:
 
-    * K_p:  MV units / PV units  (e.g. amp/K)
-    * T_i, T_d:  time  (e.g. seconds)
+    * K_p: MV-units/PV-units (e.g. amp/K for a thermoelectric
+      controller).  Don't confuse this `proportional gain` with the
+      `process gain` used in `TestBackend`.
+    * T_i, T_d: time (e.g. seconds)
     """
+    pv_units = 'PV-units'
+    mv_units = 'MV-units'
+
     def __init__(self):
-        self._max_current = None
-
-    @staticmethod
-    def _convert_F_to_C(F):
-        return (F - 32)/1.8
-
-    @staticmethod
-    def _convert_C_to_F(C):
-        return C*1.8 + 32
+        self._max_mv = None
 
     def cleanup(self):
         "Release resources and disconnect from any hardware."
         pass
 
-    def get_temp(self):
-        "Return the current process temperature in degrees Celsius"
+    def get_pv(self):
+        "Return the current process variable in PV-units"
         raise NotImplementedError()
 
-    def get_ambient_temp(self):
-        "Return room temperature in degrees Celsius"
+    def get_ambient_mv(self):
+        "Return the abmient (bath) status in PV-units"
         raise NotImplementedError()
 
-    def set_max_current(self, max):
-        "Set the max current in Amps"
+    def set_max_mv(self, max):
+        "Set the max manipulated variable in MV-units"
         raise NotImplementedError()
 
-    def get_max_current(self):
-        "Get the max current in Amps"
+    def get_max_mvt(self):
+        "Get the max manipulated variable MV-units"
         raise NotImplementedError()
 
-    def get_current(self):
-        """Return the calculated control current in Amps"
+    def get_mv(self):
+        """Return the calculated manipulated varaible in MV-units
 
-        The returned current is not the actual current, but the
-        current that the temperature controller calculates it should
-        generate.  If the voltage required to generate that current
-        exceeds the controller's max voltage (15 V on mine), then the
-        physical current will be less than the value returned here.
+        The returned current is not the actual MV, but the MV that the
+        controller calculates it should generate.  For example, if the
+        voltage required to generate an MV current exceeds the
+        controller's max voltage, then the physical current will be
+        less than the value returned here.
         """
         raise NotImplementedError()
 
@@ -133,38 +130,36 @@ class Backend (object):
 
 
 class ManualMixin (object):
-    def set_current(self, current):
-        """Set the desired control current in Amps
-        """
+    def set_mv(self, current):
+        "Set the desired manipulated variable in MV-units"
         raise NotImplementedError()
 
 
 class PIDMixin (object):
     def set_setpoint(self, setpoint):
-        "Set the temperature setpoint in degrees Celsius"
+        "Set the process variable setpoint in PV-units"
         raise NotImplementedError()
         
     def get_setpoint(self, setpoint):
-        "Get the temperature setpoint in degrees Celsius"
+        "Get the process variable setpoint in PV-units"
         raise NotImplementedError()
 
-    def get_cooling_gains(self):
+    def get_duwn_gains(self):
         """..."""
         raise NotImplementedError()
 
-    def set_cooling_gains(self, proportional=None, integral=None,
-                          derivative=None):
+    def set_down_gains(self, proportional=None, integral=None,
+                       derivative=None):
         """
         ...
         """
         raise NotImplementedError()
 
-    def get_heating_gains(self):
+    def get_up_gains(self):
         """..."""
         raise NotImplementedError()
 
-    def set_heating_gains(self, proportional=None, integral=None,
-                          derivative=None):
+    def set_up_gains(self, proportional=None, integral=None, derivative=None):
         """
         ...
         """
@@ -195,3 +190,13 @@ class PIDMixin (object):
         backend.
         """
         raise NotImplementedError()
+
+
+class TemperatureMixin (object):
+    @staticmethod
+    def _convert_F_to_C(F):
+        return (F - 32)/1.8
+
+    @staticmethod
+    def _convert_C_to_F(C):
+        return C*1.8 + 32

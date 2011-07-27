@@ -21,6 +21,7 @@
 import time as _time
 
 from . import LOG as _LOG
+from . import rules as _rules
 from .backend import get_backend as _get_backend
 from controller import Controller as _Controller
 
@@ -32,24 +33,24 @@ def test_backend(backend=None):
         backend = _get_backend('test')()
     try:
         sp = backend.get_setpoint()
-        _LOG.info('temperature = {:n} C'.format(backend.get_temp()))
-        _LOG.info('setpoint    = {:n} C'.format(sp))
-        _LOG.info('current     = {:n} A'.format(backend.get_current()))
+        _LOG.info('PV = {:n} {}'.format(backend.get_pv(), backend.pv_units))
+        _LOG.info('SP = {:n} {}'.format(sp, backend.pv_units))
+        _LOG.info('MV = {:n} {}'.format(backend.get_mv(), backend.mv_units))
 
         _set_and_check_setpoint(backend=backend, setpoint=5.0)
-        _check_max_current(backend=backend)
+        _check_max_mv(backend=backend)
         _set_and_check_setpoint(backend=backend, setpoint=50.0)
-        _check_max_current(backend=backend)
+        _check_max_mv(backend=backend)
         _set_and_check_setpoint(backend=backend, setpoint=sp)
     finally:
         if internal_backend:
             backend.cleanup()
 
 def _set_and_check_setpoint(backend, setpoint):
-    _LOG.info('setting setpoint to {:n} C'.format(setpoint))
+    _LOG.info('setting setpoint to {:n} {}'.format(setpoint, backend.pv_units))
     c.set_setpoint(setpoint)
     sp = c.get_setpoint()
-    _LOG.info('setpoint    = {:n} C'.format(sp))
+    _LOG.info('SP = {:n} {}'.format(sp, backend.pv_units))
     if sp != setpoint:
         msg = 'read setpoint {:n} != written setpoint {:n}'.format(
             sp, setpoint)
@@ -59,19 +60,21 @@ def _set_and_check_setpoint(backend, setpoint):
 def _check_max_current(backend):
     # give the backend some time to overcome any integral gain
     _time.sleep(10)
-    cur = c.get_current()
-    _LOG.info('current     = {:n} A'.format(cur))
-    mcur = c.get_max_current()
-    if cur != mcur:
-        temp = backend.get_temp()
-        sp = backend.get_setpoint()
-        msg = ('current of {:n} A is not the max {:n} A, but the system is '
-               'at {:n} C while the setpoint is at {:n}').format(
-            cur, mcur, temp, sp)
+    MV = c.get_mv()
+    _LOG.info('MV = {:n} {}'.format(MV, backend.mv_units))
+    mMV = c.get_max_mv()
+    if mv != mMV:
+        PV = backend.get_pv()
+        SP = backend.get_setpoint()
+        PVu = backend.pv_units
+        MVu = backend.mv_units
+        msg = ('current of {:n} {} is not the max {:n} {}, but the system is '
+               'at {:n} {} while the setpoint is at {:n} {}').format(
+            MV, MVu, mMV, MVu, PV, PVu, SP, PVu)
         _LOG.error(msg)
         raise Exception(msg)
 
-def test_controller_step_response(backend=None, setpoint=25):
+def test_controller_step_response(backend=None, setpoint=1):
     internal_backend = False
     if not backend:
         internal_backend = True
@@ -79,31 +82,34 @@ def test_controller_step_response(backend=None, setpoint=25):
     try:
         backend.set_mode('PID')
         c = _Controller(backend=backend)
-        max_current = backend.get_max_current()
-        current_a = 0.4 * max_current
-        current_b = 0.5 * max_current
+        max_MV = backend.get_max_mv()
+        MVa = 0.4 * max_MV
+        MVb = 0.5 * max_MV
         step_response = c.get_step_response(
-            current_a=current_a, current_b=current_b, tolerance=0.5, stable_time=4.)
-        if True:
+            mv_a=MVa, mv_b=MVb, tolerance=0.5, stable_time=4.)
+        if False:
             with open('step_response.dat', 'w') as d:
                 s = step_response[0][0]
-                for t,T in step_response:
-                    d.write('{:n}\t{:n}\n'.format(t-s, T))
-        gain,dead_time,tau,max_rate = c.analyze_step_response(
-            step_response, current_shift=current_b-current_a)
-        _LOG.debug(('step response: dead time {:n}, gain {:n}, tau {:n}, '
-                    'max-rate {:n}').format(dead_time, gain, tau, max_rate))
+                for t,PV in step_response:
+                    d.write('{:n}\t{:n}\n'.format(t-s, PV))
+        process_gain,dead_time,decay_time,max_rate = c.analyze_step_response(
+            step_response, mv_shift=MVb-MVa)
+        _LOG.debug(('step response: process gain {:n}, dead time {:n}, decay '
+                    'time {:n}, max-rate {:n}').format(
+                process_gain, dead_time, decay_time, max_rate))
+        r = rules
         for name,response_fn,modes in [
-            ('Zeigler-Nichols', c.ziegler_nichols_step_response,
+            ('Zeigler-Nichols', r.ziegler_nichols_step_response,
              ['P', 'PI', 'PID']),
-            ('Cohen-Coon', c.cohen_coon_step_response,
+            ('Cohen-Coon', r.cohen_coon_step_response,
              ['P', 'PI', 'PID']), # 'PD'
-            ('Wang-Juan-Chan', c.wang_juang_chan_step_response,
+            ('Wang-Juan-Chan', r.wang_juang_chan_step_response,
              ['PID']),
             ]:
             for mode in modes:
                 p,i,d = response_fn(
-                    gain=gain, dead_time=dead_time, tau=tau, mode=mode)
+                    process_gain=process_gain, dead_time=dead_time,
+                    decay_time=decay_time, mode=mode)
                 _LOG.debug(
                     '{} step response {}: p {:n}, i {:n}, d {:n}'.format(
                         name, mode, p, i, d))
@@ -111,18 +117,17 @@ def test_controller_step_response(backend=None, setpoint=25):
         if internal_backend:
             backend.cleanup()
 
-def test_controller_bang_bang_response(backend=None, setpoint=25):
+def test_controller_bang_bang_response(backend=None, setpoint=1):
     internal_backend = False
     if not backend:
         internal_backend = True
-        backend = _get_backend('test')(log_stream=open('pid.log', 'w'))
-        # shift our noise-less system off its setpoint
-        backend.set_setpoint(backend.get_temp()+0.1)
+        backend = _get_backend('test')()
     try:
+        backend.set_setpoint(setpoint)
         c = _Controller(backend=backend)
-        dead_band = 3*c.estimate_temperature_sensitivity()
-        bang_bang_response = c.get_bang_bang_response(dead_band=dead_band, num_oscillations=4)
-        if True:
+        dead_band = 3*c.estimate_pv_sensitivity()
+        bang_bang_response = c.get_bang_bang_response(dead_band=dead_band)
+        if False:
             with open('bang_bang_response.dat', 'w') as d:
                 s = bang_bang_response[0][0]
                 for t,T in bang_bang_response:
@@ -130,10 +135,16 @@ def test_controller_bang_bang_response(backend=None, setpoint=25):
         amplitude,period = c.analyze_bang_bang_response(bang_bang_response)
         _LOG.debug('bang-bang response: amplitude {:n}, period {:n}'.format(
                 amplitude,period))
-        p,i,d = c.ziegler_nichols_bang_bang_response(
-            amplitude=amplitude, period=period, mode='PID')
-        _LOG.debug(('Zeigler-Nichols bang-bang response: '
-                    'p {:n}, i {:n}, d {:n}').format(p, i, d))
+        for name,response_fn,modes in [
+            ('Zeigler-Nichols', r.ziegler_nichols_bang_bang_response,
+             ['P', 'PI', 'PID']),
+            ]:
+            for mode in modes:
+                p,i,d = response_fn(
+                    amplitude=amplitude, period=period, mode=mode)
+                _LOG.debug(
+                    '{} bang-bang response {}: p {:n}, i {:n}, d {:n}'.format(
+                        name, mode, p, i, d))
     finally:
         if internal_backend:
             backend.cleanup()

@@ -26,40 +26,40 @@ from numpy import linspace as _linspace
 from numpy import log as _log
 from scipy.interpolate import interp1d as _interp1d
 
-from hooke.util.fit import ModelFitter as _ModelFitter
-
 from . import LOG as _LOG
+from .fit import ModelFitter as _ModelFitter
 
 
 class Controller (object):
-    """PID temperature control frontend.
+    """PID control frontend.
 
     backend: pypid.backend.Backend instance
         backend driving your particular harware
     setpoint: float
-        initial setpoint in degrees Celsius
+        initial setpoint in PV-units
     min: float
-        minimum temperature in degrees Celsius (for sanity checks)
+        minimum PV in PV-units (for sanity checks)
     max: float
-        maximum temperature in degrees Celsius (for sanity checks)
+        maximum PV in PV-units (for sanity checks)
     """
-    def __init__(self, backend, setpoint=20.0, min=5.0, max=50.0):
+    def __init__(self, backend, setpoint=0.0, min=-float('inf'),
+                 max=float('inf')):
         self._backend = backend
         self._setpoint = setpoint
-        self._min = min
-        self._max = max
+        self._min_pv = min
+        self._max_pv = max
 
     # basic user interface methods
 
-    def get_temp(self):
-        """Return the current process temperature in degrees Celsius
+    def get_pv(self):
+        """Return the current process variable in PV-units
 
         We should expose this to users, so they don't need to go
         mucking about in `._backend`.
         """
-        return self._backend.get_temp()
+        return self._backend.get_pv()
 
-    def set_temp(self, setpoint, **kwargs):
+    def set_pv(self, setpoint, **kwargs):
         """Change setpoint to `setpoint` and wait for stability
         """
         self._backend.set_setpoint(setpoint)
@@ -67,15 +67,15 @@ class Controller (object):
 
     def wait_for_stability(self, setpoint, tolerance=0.3, time=10.,
                            timeout=-1, sleep_time=0.1, return_data=False):
-        """Wait until the temperature is sufficiently stable
+        """Wait until the PV is sufficiently stable
 
         setpoint : float
-            target temperature in degrees C
+            target PV in PV-units
         tolerance : float
-            maximum allowed deviation from `setpoint` in dregrees C
+            maximum allowed deviation from `setpoint` in PV-units
         time : float
-            time the temperature must remain in the allowed region
-            before the signal is delared "stable"
+            time the PV must remain in the allowed region before the
+            signal is delared "stable"
         timeout : float
             maximum time to wait for stability.  Set to -1 to never
             timeout.
@@ -83,16 +83,16 @@ class Controller (object):
             time in seconds to sleep between reads to avoid an
             overly-busy loop
         return_data : boolean
-            if true, also return a list of `(timestamp, temp)` tuples
+            if true, also return a list of `(timestamp, PV)` tuples
             read while waiting
 
-        Read the temperature every `sleep_time` seconds until the
-        temperature has remained within `tolerance` of `setpoint` for
-        `time`.  If the stability criteria are met, return `True`
-        (stable).  If `timeout` seconds pass before the criteria are
-        met, return `False` (not stable).
+        Read the PV every `sleep_time` seconds until the PV has
+        remained within `tolerance` of `setpoint` for `time`.  If the
+        stability criteria are met, return `True` (stable).  If
+        `timeout` seconds pass before the criteria are met, return
+        `False` (not stable).
         """
-        _LOG.debug(('wait until the temperature is stable at {:n} +/- {:n} C '
+        _LOG.debug(('wait until the PV is stable at {:n} +/- {:n} C '
                     'for {:n} seconds').format(setpoint, tolerance, time))
         stable = False
         if return_data:
@@ -104,19 +104,20 @@ class Controller (object):
         else:
             timeout_time = start_time + timeout
         while True:
-            T = self.get_temp()
-            in_range = abs(T - setpoint) < tolerance
+            PV = self.get_pv()
+            in_range = abs(PV - setpoint) < tolerance
             t = _time.time()
             if return_data:
-                data.append((t, T))
+                data.append((t, PV))
             if in_range:
                 if t >= stable_time:
-                    _LOG.debug('temperature is stable')
+                    _LOG.debug('process variable is stable')
                     stable = True
                     break  # in range for long enough
             else:
                 stable_time = t + time  # reset target time
             if timeout_time and t > timeout_time:
+                _LOG.debug('process variable is not stable')
                 break  # timeout
             _time.sleep(sleep_time)
         if return_data:
@@ -127,26 +128,26 @@ class Controller (object):
         return self.wait_for_stability(
             setpoint=setpoint, time=time, timeout=time, **kwargs)
 
-    def estimate_temperature_sensitivity(self, num_temps=10, sleep_time=0.1,
-                                         max_repeats=10):
-        temps = []
-        last_temp = None
+    def estimate_pv_sensitivity(self, values=10, sleep_time=0.1,
+                                max_repeats=10):
+        PVs = []
+        last_PV = None
         repeats = 0
         while True:
-            temp = self.get_temp()
+            PV = self.get_pv()
             if repeats == max_repeats:
-                last_temp = None
-            if temp == last_temp:
+                last_PV = None
+            if PV == last_PV:
                 repeats += 1
             else:
-                temps.append(temp)
-                if len(temps) > num_temps:
+                PVs.append(PV)
+                if len(PVs) > values:
                     break
                 repeats = 0
-                last_temp = temp
+                last_PV = PV
             _time.sleep(sleep_time)
-        temps = _array(temps)
-        return temps.std()
+        PVs = _array(PVs)
+        return PVs.std()
 
     # debugging methods
 
@@ -161,21 +162,21 @@ class Controller (object):
         """
         c = self._backend.get_current()
         pid,prop,ntgrl,deriv = self._backend.get_feedback_terms()
-        T = self.get_temp()
-        Tset = self._backend.get_setpoint()
-        if T > Tset:  # cooling
-            p,i,d = self._backend.get_cooling_gains()
-        else:  # heating
-            p,i,d = self._backend.get_heating_gains()
+        PV = self.get_pv()
+        SP = self._backend.get_setpoint()
+        if PV > SP:
+            p,i,d = self._backend.get_down_gains()
+        else:
+            p,i,d = self._backend.get_up_gains()
         _LOG.info(('pid(read) {:n} =? sum(calc from terms) {:n} '
                    '=? cur(read) {:n} A').format(pid, prop+ntgrl+deriv, c))
         _LOG.info('read: p {:n}, i {:n}, d {:n}'.format(p,i,d))
-        _LOG.info('calc: p {:n}'.format(p*(Tset-T)))
+        _LOG.info('calc: p {:n}'.format(p*(SP-PV)))
 
     # tuning experiments and data processing
 
-    def get_step_response(self, current_a, current_b,
-                          sleep_time=0.1, stable_time=10., **kwargs):
+    def get_step_response(self, mv_a, mv_b, sleep_time=0.1, stable_time=10.,
+                          **kwargs):
         "Measure a step response for later analysis"
         _LOG.debug('measure step response')
         if 'time' in kwargs:
@@ -184,38 +185,38 @@ class Controller (object):
         kwargs['sleep_time'] = sleep_time        
         mode = self._backend.get_mode()
         if mode == 'manual':
-            manual_current = self._backend.get_current()
+            manual_mv = self._backend.get_mv()
         else:
             self._backend.set_mode('manual')
         _LOG.debug('set first current and wait for stability')
-        self._backend.set_current(current_a)
-        temp_a = self.get_temp()
-        while not self.is_stable(temp_a, **kwargs):
-            temp_a = self.get_temp()
-        _LOG.debug('stabilized at {:n} C with {:n} amps'.format(
-                temp_a, current_a))
-        _LOG.debug('set second current and wait for stability')
+        self._backend.set_mv(mv_a)
+        pv_a = self.get_pv()
+        while not self.is_stable(pv_a, **kwargs):
+            pv_a = self.get_pv()
+        _LOG.debug('stabilized at {:n} {} with {:n} {}'.format(
+                pv_a, self._backend.pv_units, mv_a, self._backend.mv_units))
+        _LOG.debug('set second MV and wait for stability')
         data = []
         start_time = _time.time()
-        self._backend.set_current(current_b)
-        temp_b = temp_a
+        self._backend.set_mv(mv_b)
+        pv_b = pv_a
         while True:
-            stable,d = self.is_stable(temp_b, return_data=True, **kwargs)
+            stable,d = self.is_stable(pv_b, return_data=True, **kwargs)
             data.extend(d)
-            temp_b = self.get_temp()
+            pv_b = self.get_pv()
             if stable:
                 break
-        _LOG.debug('stabilized at {:n} C with {:n} amps'.format(
-                temp_b, current_b))
+        _LOG.debug('stabilized at {:n} {} with {:n} {}'.format(
+                pv_b, self._backend.pv_units, mv_b, self._backend.mv_units))
         if mode == 'manual':
-            self._backend.set_current(manual_current)
+            self._backend.set_mv(manual_mv)
         else:
             self._backend.set_mode(mode)
         return data
 
     @staticmethod
-    def analyze_step_response(step_response, current_shift):
-        rates = [(Tb-Ta)/(tb-ta) for ((ta,Ta),(tb,Tb))
+    def analyze_step_response(step_response, mv_shift):
+        rates = [(PVb-PVa)/(tb-ta) for ((ta,PVa),(tb,PVb))
                  in zip(step_response, step_response[1:])]
         # TODO: averaging filter?
         max_rate_i = max_rate = 0
@@ -224,35 +225,35 @@ class Controller (object):
                 max_rate_i = i
                 max_rate = abs(rate)
         max_rate_time,max_rate_temp = step_response[max_rate_i]  # TODO: avg i and i+1?
-        time_a,temp_a = step_response[0]
+        time_a,PV_a = step_response[0]
         max_rate_time -= time_a
-        dead_time = max_rate_time - (max_rate_temp - temp_a) / max_rate
-        t_data = _array([t for t,T in step_response[max_rate_i:]])
-        T_data = _array([T for t,T in step_response[max_rate_i:]])
-        model = ExponentialModel(T_data, info={'x data (s)': t_data})
-        tau,T0,T8 = model.fit()
-        gain = (T8 - temp_a) / current_shift
-        return (gain, dead_time, tau, max_rate)
+        dead_time = max_rate_time - (max_rate_temp - PV_a) / max_rate
+        t_data = _array([t for t,PV in step_response[max_rate_i:]])
+        PV_data = _array([PV for t,PV in step_response[max_rate_i:]])
+        model = ExponentialModel(PV_data, info={'x data (s)': t_data})
+        decay_time,PV0,PV8 = model.fit()
+        process_gain = (PV8 - PV_a) / mv_shift
+        return (process_gain, dead_time, decay_time, max_rate)
 
     def get_bang_bang_response(self, dead_band=0.8, num_oscillations=10,
                                max_dead_band_time=30, sleep_time=0.1):
-        orig_cool_gains = self._backend.get_cooling_gains()
-        orig_heat_gains = self._backend.get_heating_gains()
+        orig_down_gains = self._backend.get_down_gains()
+        orig_up_gains = self._backend.get_up_gains()
         _LOG.debug('measure bang-bang response')
         mode = self._backend.get_mode()
         if mode != 'PID':
             self._backend.set_mode('PID')
         i=0
         setpoint = self._backend.get_setpoint()
-        self._backend.set_cooling_gains(float('inf'), float('inf'), 0)
-        self._backend.set_heating_gains(float('inf'), float('inf'), 0)
+        self._backend.set_down_gains(float('inf'), float('inf'), 0)
+        self._backend.set_up_gains(float('inf'), float('inf'), 0)
         start_time = _time.time()
-        temp = self.get_temp()
-        heat_first = self._is_heating(
-            temp=temp, setpoint=setpoint, dead_band=dead_band)
+        pv = self.get_pv()
+        under_first = self._is_under(
+            pv=pv, setpoint=setpoint, dead_band=dead_band)
         _LOG.debug('wait to exit dead band')
         t = start_time
-        while heat_first is None:
+        while under_first is None:
             if t - start_time > max_dead_band_time:
                 msg = 'still in dead band after after {:n} seconds'.format(
                     max_dead_band_time)
@@ -260,54 +261,54 @@ class Controller (object):
                 raise ValueError(msg)
             _time.sleep(sleep_time)
             t = _time.time()
-            temp = t.get_temp()
-            heat_first = self._is_heating(
-                temp=temp, setpoint=setpoint, dead_band=dead_band)        
+            pv = t.get_pv()
+            under_first = self._is_under(
+                pv=pv, setpoint=setpoint, dead_band=dead_band)        
         _LOG.debug('read {:d} oscillations'.format(num_oscillations))
         data = []
-        heating = heat_first
+        under = under_first
         while i < num_oscillations*2 + 1:
             t = _time.time()
-            temp = self.get_temp()
+            pv = self.get_pv()
             # drop first half cycle (possibly includes ramp to setpoint)
             if i > 0:
-                data.append((t, temp))
-            is_heating = self._is_heating(
+                data.append((t, pv))
+            _under = self._is_under(
                 temp=temp, setpoint=setpoint, dead_band=dead_band)
-            if heating is True and is_heating is False:
-                _LOG.debug('transition to cooling (i={:d})'.format(i))
-                heating = False
+            if _under is True and under is False:
+                _LOG.debug('transition to PV < SP (i={:d})'.format(i))
+                under = _under
                 i += 1
-            elif heating is False and is_heating is True:
-                _LOG.debug('transition to heating (i={:d})'.format(i))
-                heating = True
+            elif under is False and is_under is True:
+                _LOG.debug('transition to PV > SP (i={:d})'.format(i))
+                under = _under
                 i += 1
             _time.sleep(sleep_time)
-        self._backend.set_cooling_gains(*orig_cool_gains)
-        self._backend.set_heating_gains(*orig_heat_gains)
+        self._backend.set_down_gains(*orig_down_gains)
+        self._backend.set_up_gains(*orig_up_gains)
         if mode != 'PID':
             self._backend.set_mode(mode)
         return data
 
     @staticmethod
     def analyze_bang_bang_response(bang_bang_response):
-        t_data = _array([t for t,T in bang_bang_response])
-        T_data = _array([T for t,T in bang_bang_response])
-        amp = (T_data.max() - T_data.min()) / 2
-        freq = Controller._get_frequency(x_data=t_data, y_data=T_data)
+        t_data = _array([t for t,PV in bang_bang_response])
+        PV_data = _array([PV for t,PV in bang_bang_response])
+        amp = (PV_data.max() - PV_data.min()) / 2
+        freq = Controller._get_frequency(x_data=t_data, y_data=PV_data)
         period = 1./freq
         return (amp, period)
 
     def get_ultimate_cycle_response(self, proportional, period):
-        orig_cool_gains = self._backend.get_cooling_gains()
-        orig_heat_gains = self._backend.get_heating_gains()
+        orig_down_gains = self._backend.get_down_gains()
+        orig_up_gains = self._backend.get_up_gains()
         _LOG.debug('measure ultimate cycle response')
         mode = self._backend.get_mode()
         if mode != 'PID':
             self._backend.set_mode('PID')
         # TODO...
-        self._backend.set_cooling_gains(*orig_cool_gains)
-        self._backend.set_heating_gains(*orig_heat_gains)
+        self._backend.set_down_gains(*orig_down_gains)
+        self._backend.set_up_gains(*orig_up_gains)
         if mode != 'PID':
             self._backend.set_mode(mode)
         return data
@@ -318,104 +319,10 @@ class Controller (object):
             ultimate_cycle_response)
         return period
 
-    # tuning rules
-
-    @staticmethod
-    def ziegler_nichols_step_response(gain, dead_time, tau, mode='PID'):
-        r = dead_time / tau
-        if r < 0.1 or r > 1:
-            _LOG.warn(('Ziegler-Nichols not a good idea when '
-                       'dead-time/tau = {:n}').format(r))
-        pkern = tau/(gain*dead_time)
-        if mode == 'P':
-            return (pkern, float('inf'), 0)
-        elif mode == 'PI':
-            return (0.9*pkern, 3.3*dead_time, 0)
-        elif mode == 'PID':
-            return (1.2*pkern, 2*dead_time, dead_time/2.)
-        raise ValueError(mode)
-
-    def ziegler_nichols_bang_bang_response(self, amplitude, period,
-                                           max_current=None, mode='PID'):
-        if max_current is None:
-            max_current = self._backend.get_max_current()
-        return self._ziegler_nichols_bang_bang_response(
-            amplitude, period, max_current=max_current, mode=mode)
-
-    @staticmethod
-    def _ziegler_nichols_bang_bang_response(amplitude, period,
-                                            max_current, mode='PID'):
-        """
-        amplitude : float
-            center-to-peak amplitude (in K) of bang-bang oscillation
-        period : float
-            period (in seconds) of the critical oscillation
-        max_current : float
-            "bang" current (in amps)
-        """
-        proportional = float(max_current)/amplitude
-        period = float(period)
-        if mode == 'P':
-            return (proportional/2, float('inf'), 0)
-        elif mode == 'PI':
-            return (proportional/3, 2*period, 0)
-        elif mode == 'PID':
-            return (proportional/2, period, period/4)
-        raise ValueError(mode)
-
-    def ziegler_nichols_ultimate_cycle_response(self, proportional, period):
-        """
-        proportional : float
-            critical P-only gain (ultimate gain, for sustained oscillation)
-        period : float
-            period (in seconds) of the critical oscillation
-
-        Microstar Laboratories has a `nice analysis`_ on ZN
-        limitations, which points out that ZN-tuning assumes your
-        system has the FOPDT transfer function (see `TestBackend` for
-        details).
-
-        .. _nice analysis: http://www.mstarlabs.com/control/znrule.html
-        """
-        if mode == 'P':
-            return (0.50*proportional, float('inf'), 0)
-        elif mode == 'PI':
-            return (0.45*proportional, period/1.2, 0)
-        elif mode == 'PID':
-            return (0.60*proportional, period/2, period/8)
-        raise ValueError(mode)
-
-    @staticmethod
-    def cohen_coon_step_response(gain, dead_time, tau, mode='PID'):
-        r = dead_time / tau
-        pkern = tau/(gain*dead_time)
-        if mode == 'P':
-            return (pkern*(1+r/3.), float('inf'), 0)
-        elif mode == 'PI':
-            return (pkern*(0.9+r/12.), (30.+3*r)/(9+20*r)*dead_time, 0)
-        elif mode == 'PD':  # double check
-            return (1.24*pkern*(1+0.13*tf), float('inf'),
-                    (0.27-0.36*t)/(1-0.87*t)*dead_time)
-        elif mode == 'PID':
-            return (pkern*(4./3+r/4.), (32.-6*r)/(13.-8*r)*dead_time,
-                    4/(11.+2*r)*dead_time)
-        raise ValueError(mode)
-
-    @staticmethod
-    def wang_juang_chan_step_response(gain, dead_time, tau, mode='PID'):
-        """Wang-Juang-Chan tuning
-        """
-        K,L,T = (gain, dead_time, tau)
-        if mode == 'PID':
-            return ((0.7303+0.5307*T/L)*(T+0.5*L)/(K*(T+L)),
-                    T + 0.5*L,
-                    0.5*L*T / (T + 0.5*L))
-        raise ValueError(mode)        
-
     # utility methods
 
     def _wait_until_close(self, setpoint, tolerance=0.3, sleep_time=0.1):
-        while abs(self.get_temp() - setpoint) > tolerance:
+        while abs(self.get_pv() - setpoint) > tolerance:
             _time.sleep(sleep_time)
 
     def _time_function(self, function, args=(), kwargs=None, count=10):
@@ -428,28 +335,28 @@ class Controller (object):
         stop = _time.time()
         return float(stop-start)/count
 
-    def _is_heating(self, temp=None, setpoint=None, dead_band=None):
-        if temp is None:
-            temp = self.get_temp()
+    def _is_under(self, pv=None, setpoint=None, dead_band=None):
+        if pv is None:
+            pv = self.get_pv()
         if setpoint is None:
-            temp = self._backend.get_setpoint()
-        low_temp = high_temp = setpoint
+            setpoint = self._backend.get_setpoint()
+        low_pv = high_pv = setpoint
         if dead_band:
-            low_temp -= dead_band
-            high_temp += dead_band
-        if temp < low_temp:
-            return False
-        elif temp > high_temp:
+            low_pv -= dead_band
+            high_pv += dead_band
+        if pv < low_pv:
             return True
+        elif pv > high_pv:
+            return False
         return None
 
-    def _select_parameter(self, heating_result=None, cooling_result=None,
+    def _select_parameter(self, under_result=None, over_result=None,
                           dead_band_result=None, **kwargs):
-        heating = self._is_heating(**kwargs)
-        if heating:
-            return heating_result
-        elif heating is False:
-            return cooling_result
+        under = self._is_under(**kwargs)
+        if under:
+            return under_result
+        elif under is False:
+            return over_result
         return dead_band_result
 
     @staticmethod
@@ -483,8 +390,8 @@ class Controller (object):
         if value > max:
             raise ValueError('%g > %g' % (value, max))
 
-    def _check_temp(temp):
-        self._check_range(temp, self._min, self._max)
+    def _check_pv(pv):
+        self._check_rangee(pv, self._min_pv, self._max_pv)
 
 
 class ExponentialModel (_ModelFitter):

@@ -44,42 +44,9 @@ __ `Laird thermal`_
 TestBackend
 ~~~~~~~~~~~
 
-To get a feel for driving a PID system, check out the `TestBackend`.
-For example, you can experiment with different feedback terms and dead
-times to understand why you're getting instability or other control
-effects.  Here's an example that shows a reasonable approach with a
-bit of integrator overshoot::
-
-  >>> from pypid.backend.test import TestBackend
-  >>> from time import sleep
-  >>> from matplotlib import pyplot
-  >>> from numpy import loadtxt
-  >>> log_file = 'pid.log'
-  >>> log_stream = open('pid.log', 'w')
-  >>> b = TestBackend(log_stream=log_stream)
-  >>> b.set_max_current(0.6)
-  >>> b.set_heating_gains(propband=2, integral=.1)
-  >>> b.set_cooling_gains(propband=2, integral=.1)
-  >>> b.set_setpoint(25)
-  >>> sleep(120)
-  >>> t.cleanup()
-  >>> log_stream.close()
-  >>> header = open(log_file, 'r').readline()
-  >>> label = header.strip('#\n').split('\t')
-  >>> data = loadtxt('pid.log')
-  >>> pyplot.hold(True)
-  >>> for i in range(1, len(label)):
-  ...     if i in [1, 3, 5]:
-  ...         if i:
-  ...             pyplot.legend(loc='best')  # add legend to previous subplot
-  ...         pyplot.subplot(3, 1, (i-1)/2 + 1)
-  ...     pyplot.plot(data[:,0], data[:,i], '.', label=label[i])
-  >>> pyplot.legend(loc='best')
-  >>> pyplot.show()
-
-Of course, you can use whatever plotting program you like to graph the
-values stored to `pid.log`.  Matplotlib_ and NumPy_ are just
-convenient Python-based packages.
+To get a feel for driving a PID system, look atcheck out the
+`TestBackend`, which simulates a standard first-order process with
+dead time (FOPDT).
 
 Installation
 ============
@@ -106,9 +73,12 @@ distribution, you'll need the following dependencies:
 =========  =====================  ================  ==========================
 Package    Purpose                Debian_           Gentoo_
 =========  =====================  ================  ==========================
-pymodbus_  Modbus stack           python-modbus     dev-python/twisted
-pySerial_  serial comminication   python-serial     dev-python/pyserial
+aubio_     Pitch detection        python-aubio      media-libs/aubio
 nose_      testing                python-nose       dev-python/nose
+NumPy_     Controller analysis    python-numpy      dev-python/numpy
+pySerial_  serial comminication   python-serial     dev-python/pyserial
+pymodbus_  Modbus stack           python-modbus     dev-python/twisted
+SciPy_     Controller analysis    python-scipy      dev-python/scipy
 =========  =====================  ================  ==========================
 
 Actually, `pymodbus` may (depending on your packaging system) depend
@@ -167,7 +137,6 @@ Copyright 2008-2011
 .. _Modbus: http://en.wikipedia.org/wiki/Modbus
 .. _serial port: http://en.wikipedia.org/wiki/Serial_port
 .. _Matplotlib: http://matplotlib.sourceforge.net/
-.. _NumPy: http://numpy.scipy.org/
 .. _Laird announcement: http://www.lairdtech.com/NewsItem.aspx?id=953
 .. _wayback: http://web.archive.org/web/20090204201524/http://melcor.com/
 .. _Laird thermal: http://lairdtech.thomasnet.com/category/thermal-management-solutions/
@@ -177,9 +146,12 @@ Copyright 2008-2011
      http://www.physics.drexel.edu/~wking/unfolding-disasters/posts/Gentoo_overlay
 .. _Debian: http://www.debian.org/
 .. _Gentoo: http://www.gentoo.org/
+.. _aubio: http://aubio.org/
+.. _NumPy: http://numpy.scipy.org/
 .. _pymodbus: http://code.google.com/p/pymodbus/
 .. _pySerial: http://pyserial.sourceforge.net/
 .. _Twisted: http://twistedmatrix.com/trac/
+.. _SciPy: http://www.scipy.org/
 .. _db578120: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=578120
 .. _nose: http://somethingaboutorange.com/mrl/projects/nose/
 .. _Git: http://git-scm.com/

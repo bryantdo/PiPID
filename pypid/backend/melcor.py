@@ -26,6 +26,7 @@ from .. import LOG as _LOG
 from . import Backend as _Backend
 from . import ManualMixin as _ManualMixin
 from . import PIDMixin as _PIDMixin
+from . import TemperatureMixin as _TemperatureMixin
 
 
 class Register (object):
@@ -124,9 +125,17 @@ class BoundedFloatRegister (FloatRegister):
         return super(BoundedFloatRegister, self).decode(value, **kwargs)
 
 
-class MelcorBackend (_Backend, _ManualMixin, _PIDMixin):
+class MelcorBackend (_Backend, _ManualMixin, _PIDMixin, _TemperatureMixin):
     """Temperature control backend for a Melcor MTCA Temperature Controller
+
+    * PV: process temperature
+    * PV-units: degrees Celsius
+    * MV: controller current
+    * MV-units: amps
     """
+    pv_units = 'C'
+    mv_units = 'A'
+
     # Relative register addresses from back page of Melcor Manual.
     # Then I went through Chapter 6 tables looking for missing
     # registers.  References are from Series MTCA Thermoelectric
@@ -474,13 +483,13 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin):
 
     # Support for Backend methods
 
-    def get_temp(self):
+    def get_pv(self):
         return self._read('HIGH_RESOLUTION')
 
-    def get_ambient_temp(self):
+    def get_ambient_pv(self):
         return self._convert_F_to_C(self._read('AMBIENT_TEMPERATURE'))
 
-    def set_max_current(self, max):
+    def set_max_mv(self, max):
         """Set the max current in Amps
 
         0.2 A is the default max current since it seems ok to use
@@ -496,7 +505,7 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin):
         self._write('HIGH_POWER_LIMIT_BELOW', max_percent)
         self._max_current = max
 
-    def get_max_current(self):
+    def get_max_mv(self):
         percent = self._read('HIGH_POWER_LIMIT_ABOVE')
         above = percent/100. * self._spec_max_current
         percent = self._read('HIGH_POWER_LIMIT_BELOW')
@@ -506,7 +515,7 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin):
         self._max_current = above
         return above
 
-    def get_current(self):
+    def get_mv(self):
         pout = self._read('PERCENT_OUTPUT')
         cur = self._spec_max_current * pout / 100.0
         return cur
@@ -529,7 +538,7 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin):
 
     # ManualMixin methods
 
-    def set_current(self, current):
+    def set_mv(self, current):
         if current > self._spec_max_current:
             raise ValueError('current {} exceeds spec maximum {}'.format(
                     current, self._spec_max_current))
@@ -588,22 +597,21 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin):
         proportional = max_current/propband
         return (proportional, integral, derivative)
 
-    def set_cooling_gains(self, proportional=None, integral=None,
-                          derivative=None):
+    def set_down_gains(self, proportional=None, integral=None,
+                       derivative=None):
         self._set_gains(
             output=1, proportional=proportional, integral=integral,
             derivative=derivative)
 
-    def get_cooling_gains(self):
+    def get_down_gains(self):
         return self._get_gains(output=1)
 
-    def set_heating_gains(self, proportional=None, integral=None,
-                          derivative=None):
+    def set_up_gains(self, proportional=None, integral=None, derivative=None):
         self._set_gains(
             output=2, proportional=proportional, integral=integral,
             derivative=derivative)
 
-    def get_heating_gains(self):
+    def get_up_gains(self):
         return self._get_gains(output=2)
 
     def get_feedback_terms(self):
