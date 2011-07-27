@@ -32,10 +32,9 @@ Our controller is still going strong since 1999, but Melcor has moved
 around.  According to their `2005 announcement`__ the Laird Group PLC
 purchased Melcor from Fedders Corporation, and by 2009 (according to
 the `Internet Archive Wayback Machine`__) they phased out the old
-website at `melcor.com <http://melcor.com>`_ in favor of `their own
-thermal site`__, and it looks like there is no longer support for the
-older MTCA controllers.  There seem to be a number of them on eBay_
-though ;).
+website at `melcor.com`_ in favor of `their own thermal site`__, and
+it looks like there is no longer support for the older MTCA
+controllers.  There seem to be a number of them on eBay_ though ;).
 
 __ `Laird announcement`_
 __ wayback_
@@ -136,9 +135,9 @@ Copyright 2008-2011
 .. _PID: http://en.wikipedia.org/wiki/PID_controller
 .. _Modbus: http://en.wikipedia.org/wiki/Modbus
 .. _serial port: http://en.wikipedia.org/wiki/Serial_port
-.. _Matplotlib: http://matplotlib.sourceforge.net/
 .. _Laird announcement: http://www.lairdtech.com/NewsItem.aspx?id=953
 .. _wayback: http://web.archive.org/web/20090204201524/http://melcor.com/
+.. _melcor.com: http://melcor.com
 .. _Laird thermal: http://lairdtech.thomasnet.com/category/thermal-management-solutions/
 .. _eBay: http://www.ebay.com/
 .. _layman: http://layman.sourceforge.net/
