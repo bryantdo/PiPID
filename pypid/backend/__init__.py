@@ -83,7 +83,7 @@ class Backend (object):
         "Return the current process variable in PV-units"
         raise NotImplementedError()
 
-    def get_ambient_mv(self):
+    def get_ambient_pv(self):
         "Return the abmient (bath) status in PV-units"
         raise NotImplementedError()
 
