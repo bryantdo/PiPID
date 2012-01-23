@@ -95,16 +95,14 @@ class FloatRegister (Register):
         return _struct.unpack('h', _struct.pack('H', melcor))[0] / decimal
 
     def encode(self, value, **kwargs):
-        if self.decimal:
-            decimal = self.decimal
-        elif self.decimal_offset:
+        decimal = self.decimal
+        if self.decimal_offset:
             decimal *= self.decimal_offset
         return self._float2melcor(value, decimal)
 
     def decode(self, value, decimal=None):
-        if self.decimal:
-            decimal = self.decimal
-        elif self.decimal_offset:
+        decimal = self.decimal
+        if self.decimal_offset:
             decimal *= self.decimal_offset
         return self._melcor2float(value, decimal)
 
@@ -456,8 +454,10 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin, _TemperatureMixin):
         register = self._register[register_name]
         if 'r' not in register.direction:
             raise ValueError(register_name)
-        if register.needs_decimal and not self._decimal:
-            self._decimal = self._get_decimal()
+        if register.needs_decimal:
+            if not self._decimal:
+                self._decimal = self._get_decimal()
+            register.decimal = self._decimal
         rc = self._client.read_holding_registers(
             address=register.value, count=1, unit=self._controller)
         assert rc.function_code < 0x80
