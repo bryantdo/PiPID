@@ -470,8 +470,10 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin, _TemperatureMixin):
         register = self._register[register_name]
         if 'w' not in register.direction:
             raise ValueError(register_name)
-        if register.needs_decimal and not self._decimal:
-            self._decimal = self._get_decimal()
+        if register.needs_decimal:
+            if not self._decimal:
+                self._decimal = self._get_decimal()
+            register.decimal = self._decimal
         v = register.encode(value, decimal=self._decimal)
         _LOG.info('write %s: %s (%s)' % (register_name, v, value))
         rc = self._client.write_register(
