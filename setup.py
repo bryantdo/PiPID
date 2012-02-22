@@ -8,15 +8,14 @@ from pypid import __version__
 
 
 _this_dir = os.path.dirname(__file__)
-base_url = 'http://physics.drexel.edu/~wking'
 
 setup(name='pypid',
       version=__version__,
       maintainer='W. Trevor King',
       maintainer_email='wking@drexel.edu',
-      url = '{}/unfolding-disasters/posts/pypid'.format(base_url),
-      download_url = '{}/code/python/pypid-{}.tar.gz'.format(
-        base_url, __version__),
+      url='http://blog.tremily.us/posts/pypid',
+      download_url='http://git.tremily.us/?p=pypid.git;a=snapshot;h=v{};sf=tgz'.format(
+        __version__),
       license = 'GNU General Public License (GPL)',
       platforms = ['all'],
       description = __doc__,

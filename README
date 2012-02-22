@@ -95,7 +95,7 @@ Installing by hand
 
 Pypid is available as a Git_ repository::
 
-    $ git clone http://www.physics.drexel.edu/~wking/code/git/pypid.git
+    $ git clone git://tremily.us/pypid.git
 
 See the homepage_ for details.  To install the checkout, run the
 standard::
@@ -141,8 +141,7 @@ Copyright 2008-2011
 .. _Laird thermal: http://lairdtech.thomasnet.com/category/thermal-management-solutions/
 .. _eBay: http://www.ebay.com/
 .. _layman: http://layman.sourceforge.net/
-.. _wtk overlay:
-     http://www.physics.drexel.edu/~wking/unfolding-disasters/posts/Gentoo_overlay
+.. _wtk overlay: http://blog.tremily.us/posts/Gentoo_overlay
 .. _Debian: http://www.debian.org/
 .. _Gentoo: http://www.gentoo.org/
 .. _aubio: http://aubio.org/
@@ -154,6 +153,5 @@ Copyright 2008-2011
 .. _db578120: http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=578120
 .. _nose: http://somethingaboutorange.com/mrl/projects/nose/
 .. _Git: http://git-scm.com/
-.. _homepage:
-     http://www.physics.drexel.edu/~wking/unfolding-disasters/posts/pypid/
+.. _homepage: http://blog.tremily.us/posts/pypid/
 .. _GNU General Public License Version 3: http://www.gnu.org/licenses/gpl.txt
