@@ -13,7 +13,7 @@ setup(name='pypid',
       version=__version__,
       maintainer='W. Trevor King',
       maintainer_email='wking@drexel.edu',
-      url='http://blog.tremily.us/posts/pypid',
+      url='http://blog.tremily.us/posts/pypid/',
       download_url='http://git.tremily.us/?p=pypid.git;a=snapshot;h=v{};sf=tgz'.format(
         __version__),
       license = 'GNU General Public License (GPL)',
