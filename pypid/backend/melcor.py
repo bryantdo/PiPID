@@ -29,6 +29,10 @@ from . import PIDMixin as _PIDMixin
 from . import TemperatureMixin as _TemperatureMixin
 
 
+class MelcorError (Exception):
+    pass
+
+
 class Register (object):
     def __init__(self, name, value, direction='rw', reference=None, help=None):
         self.name = name
@@ -460,6 +464,10 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin, _TemperatureMixin):
             register.decimal = self._decimal
         rc = self._client.read_holding_registers(
             address=register.value, count=1, unit=self._controller)
+        if rc is None:
+            raise MelcorError(
+                ('could not read {} from {}.  Is the controller connected?'
+                 ).format(register, self._client))
         assert rc.function_code < 0x80
         value = rc.registers[0]
         v = register.decode(value, decimal=self._decimal)
