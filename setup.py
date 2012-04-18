@@ -12,7 +12,7 @@ _this_dir = os.path.dirname(__file__)
 setup(name='pypid',
       version=__version__,
       maintainer='W. Trevor King',
-      maintainer_email='wking@drexel.edu',
+      maintainer_email='wking@tremily.us',
       url='http://blog.tremily.us/posts/pypid/',
       download_url='http://git.tremily.us/?p=pypid.git;a=snapshot;h=v{};sf=tgz'.format(
         __version__),
