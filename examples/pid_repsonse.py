@@ -47,7 +47,7 @@ parser.add_argument(
     help='process gain (output units over input units)',)
 parser.add_argument(
     '-I', '--integral', metavar='TIME', type=float, default=None,
-    help='intergral gain timescale')
+    help='integral gain timescale')
 parser.add_argument(
     '-D', '--derivative', metavar='TIME', type=float, default=None,
     help='derivative gain timescale')
