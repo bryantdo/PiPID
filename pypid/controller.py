@@ -324,7 +324,7 @@ class Controller (object):
             _time.sleep(sleep_time)
 
     def _time_function(self, function, args=(), kwargs=None, count=10):
-        "Rough estimate timing of get_temp(), takes me about 0.1s"
+        "Rough estimate timing of get_pv(), takes me about 0.1s"
         if kwargs is None:
             kwargs = {}
         start = _time.time()

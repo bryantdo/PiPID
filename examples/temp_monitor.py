@@ -35,8 +35,8 @@ with open('temp_monitor.log', 'a') as f:
     while True:
         time.sleep(next_time - time.time())
         tstr = time.strftime('%Y-%m-%d %H:%M:%S')
-        temp = str(b.get_temp())
-        ambient = str(b.get_ambient_temp())
+        temp = str(b.get_pv())
+        ambient = str(b.get_ambient_pv())
         f.write('\t'.join([tstr, temp, ambient]) + '\n')
         f.flush()
         print('\t'.join([tstr, temp, ambient]))

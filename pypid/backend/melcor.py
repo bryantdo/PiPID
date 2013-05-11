@@ -645,7 +645,7 @@ class MelcorBackend (_Backend, _ManualMixin, _PIDMixin, _TemperatureMixin):
         self.set_heating_gains(proportional=p)
         while True:
             _LOG.debug('waiting for an out-of-propband temperature')
-            if abs(self.get_temp() - sp) > small_temp_range:
+            if abs(self.get_pv() - sp) > small_temp_range:
                 break  # we're out of the propband, I-term resets
         self.set_cooling_gains(proportional=cp)
         self.set_heating_gains(proportional=hp)
