@@ -82,7 +82,7 @@ class Backend (object):
         raise NotImplementedError()
 
     def get_ambient_pv(self):
-        "Return the abmient (bath) status in PV-units"
+        "Return the ambient (bath) status in PV-units"
         raise NotImplementedError()
 
     def set_max_mv(self, max):
