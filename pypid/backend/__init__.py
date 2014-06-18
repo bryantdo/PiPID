@@ -142,7 +142,7 @@ class PIDMixin (object):
         "Get the process variable setpoint in PV-units"
         raise NotImplementedError()
 
-    def get_duwn_gains(self):
+    def get_down_gains(self):
         """..."""
         raise NotImplementedError()
 
