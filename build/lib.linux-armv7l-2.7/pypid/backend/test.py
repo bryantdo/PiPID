@@ -22,10 +22,8 @@ from . import Backend as _Backend
 from . import ManualMixin as _ManualMixin
 from . import PIDMixin as _PIDMixin
 
-import Adafruit_GPIO.SPI as SPI
-import Adafruit_MAX31855.MAX31855 as MAX31855
 
-class RaspberryPiBackend (_Backend, _ManualMixin, _PIDMixin):
+class TestBackend (_Backend, _ManualMixin, _PIDMixin):
     """Test backend for demonstrating `Controller` function
 
     The response function for a first-order plus dead time process
@@ -71,7 +69,6 @@ class RaspberryPiBackend (_Backend, _ManualMixin, _PIDMixin):
     http://ep.physoc.org/content/90/5/727.long
     September 1, 2005 Experimental Physiology, 90, 727-738.
     """
-
     def __init__(self, bath=0., process_gain=1., dead_time=1.,
                  decay_time=1., max_mv=1., process_period=0.01,
                  log_stream=None):
@@ -107,11 +104,6 @@ class RaspberryPiBackend (_Backend, _ManualMixin, _PIDMixin):
         self._manual_mv = 0
         self._mode = 'PID'
         self._PVs = [bath]*(self._dead_periods+1)
-        # MAX31855 temp probe constants
-        CLK = 25
-        CS = 24
-        DO = 18
-        self._sensor = MAX31855.MAX31855(CLK, CS, DO)
         self._start_process_thread()
 
     def cleanup(self):
@@ -130,8 +122,8 @@ class RaspberryPiBackend (_Backend, _ManualMixin, _PIDMixin):
     def _run_process(self):
         if self._log_stream:
             line = '\t'.join((
-                'time', 'SP', 'PV_int', 'PV', 'dPV_bath', 'dPV_drive',
-                'MV', 'intergal', 'derivative'))
+                    'time', 'SP', 'PV_int', 'PV', 'dPV_bath', 'dPV_drive',
+                    'MV', 'intergal', 'derivative'))
             self._log_stream.write('#{}\n'.format(line))
         dt = self._process_period
         next_time = _time.time() + dt
@@ -165,10 +157,10 @@ class RaspberryPiBackend (_Backend, _ManualMixin, _PIDMixin):
         return mv
 
     def get_pv(self):
-        return self._sensor.readTempC()
+        return self._PVs[1]
 
     def get_ambient_pv(self):
-        return self._sensor.readInternalC()
+        return self._bath
 
     def set_max_mv(self, max):
         self._max_mv = max
@@ -218,7 +210,7 @@ class RaspberryPiBackend (_Backend, _ManualMixin, _PIDMixin):
         return self._setpoint
 
     def set_down_gains(self, proportional=None, integral=None,
-                       derivative=None):
+                          derivative=None):
         if proportional is not None:
             self._p_down = proportional
         if integral is not None:
@@ -230,7 +222,7 @@ class RaspberryPiBackend (_Backend, _ManualMixin, _PIDMixin):
         return (self._p_down, self._i_down, self._d_down)
 
     def set_up_gains(self, proportional=None, integral=None,
-                     derivative=None):
+                          derivative=None):
         if proportional is not None:
             self._p_up = proportional
         if integral is not None:
